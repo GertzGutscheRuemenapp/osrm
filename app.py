@@ -13,8 +13,8 @@ app.process = {}
 MODES = ['car', 'foot', 'bicycle']
 PORTS = {
     'car': os.environ.get('MODE_CAR_PORT', 5001),
-    'foot': os.environ.get('MODE_BIKE_PORT', 5002),
-    'bicycle': os.environ.get('MODE_FOOT_PORT', 5003),
+    'bicycle': os.environ.get('MODE_BIKE_PORT', 5002),
+    'foot': os.environ.get('MODE_FOOT_PORT', 5003),
 }
 
 
