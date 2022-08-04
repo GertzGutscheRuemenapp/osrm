@@ -65,7 +65,7 @@ def run(mode):
     return ({ 'message': 'mode "{}" started at port {}'.format(mode, port) }, 200)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=80, use_reloader=True)
+    app.run(host="0.0.0.0", port=8001, use_reloader=True)
     for mode in MODES:
         run(mode)
 

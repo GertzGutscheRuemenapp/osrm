@@ -11,7 +11,7 @@ COPY app.py .
 RUN python -m pip install --trusted-host pypi.python.org -r requirements.txt
 
 EXPOSE 5000-5010
-EXPOSE 80
+EXPOSE 8001
 
 CMD ["python", "app.py"]
 
