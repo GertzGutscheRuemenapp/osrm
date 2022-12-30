@@ -1,4 +1,4 @@
-FROM osrm/osrm-backend AS osrm-docker
+FROM ghcr.io/project-osrm/osrm-backend:v5.27.1 AS osrm-docker
 
 RUN apt-get -y update \
     && apt-get -y upgrade \
