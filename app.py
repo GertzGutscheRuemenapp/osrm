@@ -79,7 +79,7 @@ def run(mode):
         return make_response(({'error': msg}, 402))
     if app.process.get(mode):
         app.process[mode].kill()
-    body = request.get_json() or {}
+    body = request.get_json(silent=True) or {}
     port = body.get('port', PORTS.get(mode, 5000))
     max_table_size = body.get('max_table_size',
                               os.environ.get('MAX_TABLE_SIZE', 65535))
@@ -97,7 +97,7 @@ def remove(mode):
     if app.process.get(mode):
         app.process[mode].kill()
     fp_osrm = os.path.join(app.config['DATA_FOLDER'], mode)
-    for fp in glob.glob(f'{fp_osrm}*'):
+    for fp in glob.glob(f'{fp_osrm}.osrm*'):
         os.remove(fp)
     msg = f'router "{fp_osrm}" removed'
     logging.info(msg)
