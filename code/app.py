@@ -51,7 +51,7 @@ def build(mode):
     if not file or not file.filename:
         return make_response(({'error': 'no file provided'}, 400))
 
-    do_contract = False
+    do_contract = request.form.get('algorithm') == 'ch'
     if app.process.get(mode):
         app.process[mode].kill()
     data_folder = app.config['DATA_FOLDER']
@@ -92,7 +92,9 @@ def run(mode):
         logger.error(msg)
         return make_response(({'error': msg}, 400))
     fp_osrm = os.path.join(app.config['DATA_FOLDER'], mode)
-    do_contract = False
+
+    do_contract = request.form.get('algorithm') == 'ch'
+
     if not os.path.exists(f'{fp_osrm}.osrm.edges'):
         msg = f'error: mode "{mode}" not built yet'
         logger.error(msg)
@@ -111,15 +113,16 @@ def run(mode):
          '--max-table-size', str(max_table_size),
          f'{fp_osrm}.osrm',
          ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT)
+        #stdout=subprocess.PIPE,
+        #stderr=subprocess.STDOUT,
+    )
 
     algorithm_label = 'Contraction Hierarchies' if do_contract \
         else 'Multi-Level Dijkstra'
     msg = f'router "{mode}" started at port {port} with {algorithm_label} algorithm'
     logger.info(msg)
-    with app.process[mode].stdout:
-        log_subprocess_output(app.process[mode].stdout)
+    #with app.process[mode].stdout:
+    #log_subprocess_output(app.process[mode].stdout)
     logger.info(msg)
     return make_response(({'message': msg}, 200))
 

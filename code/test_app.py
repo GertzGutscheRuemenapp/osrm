@@ -39,7 +39,8 @@ def test_get(client):
 def build(client):
     """build the router"""
     fp = os.path.join(os.path.dirname(__file__), 'testdata', 'test.osm.pbf')
-    files = {'file': open(fp, 'rb')}
+    files = {'file': open(fp, 'rb'),
+             'algoritm': 'ch', }
 
     response = client.post("/build/foot", data=files)
     assert response.status_code == 200
@@ -51,7 +52,7 @@ def test_build(client):
     files = {'file': open(fp, 'rb')}
 
     # mode velocopter does not exist
-    response = client.post("/build/velocopter", data={'files': files})
+    response = client.post("/build/velocopter", data=files)
     assert response.status_code == 400
 
     # no pbf-file provided
@@ -59,6 +60,15 @@ def test_build(client):
     assert response.status_code == 400
 
     # this should work
+    files = {'file': open(fp, 'rb'),
+             'algorithm': 'ch'}
+    response = client.post("/build/foot", data=files)
+    assert response.status_code == 200
+
+    #params['algorithm'] = 'ch'
+    files = {'file': open(fp, 'rb'),
+             'algorithm': 'mld'}
+    # this should work with other algorithm
     response = client.post("/build/foot", data=files)
     assert response.status_code == 200
 
@@ -69,7 +79,7 @@ def test_run(client):
     build(client)
 
     # start the router
-    response = client.post("/run/foot")
+    response = client.post("/run/foot", data={'algoritm': 'ch'}, )
     assert response.status_code == 200
     sleep(0.2)
 
