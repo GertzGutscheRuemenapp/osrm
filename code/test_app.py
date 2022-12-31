@@ -38,7 +38,7 @@ def test_get(client):
 
 def build(client):
     """build the router"""
-    fp = os.path.join(os.path.dirname(__file__), 'testdata', 'network.pbf')
+    fp = os.path.join(os.path.dirname(__file__), 'testdata', 'test.osm.pbf')
     files = {'file': open(fp, 'rb')}
 
     response = client.post("/build/foot", data=files)
@@ -47,7 +47,7 @@ def build(client):
 
 def test_build(client):
     """Test the building of a container"""
-    fp = os.path.join(os.path.dirname(__file__), 'testdata', 'network.pbf')
+    fp = os.path.join(os.path.dirname(__file__), 'testdata', 'test.osm.pbf')
     files = {'file': open(fp, 'rb')}
 
     # mode velocopter does not exist
