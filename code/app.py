@@ -1,8 +1,6 @@
 import os
 import glob
-import random
-from flask import abort, Flask, request, make_response
-from markupsafe import escape
+from flask import Flask, request, make_response
 import subprocess
 import logging
 
@@ -25,7 +23,7 @@ PORTS = {
 }
 
 
-@app.route("/", methods = ['GET'])
+@app.route("/", methods=['GET'])
 def home():
     return '''
     <h2>OSRM Wrapper</h2>
@@ -37,13 +35,14 @@ def home():
     POST <b>/stop/{mode}</b> to stop router <br>
     '''
 
-@app.route("/build/<mode>", methods = ['POST'])
+
+@app.route("/build/<mode>", methods=['POST'])
 def build(mode):
     if mode not in MODES:
         return make_response(({'error': "mode '{}' unknown".format(mode)}, 400))
     file = request.files.get('file')
     if not file or not file.filename:
-        return make_response(({ 'error': 'no file provided' }, 400))
+        return make_response(({'error': 'no file provided'}, 400))
     if app.process.get(mode):
         app.process[mode].kill()
     data_folder = app.config['DATA_FOLDER']
@@ -66,12 +65,13 @@ def build(mode):
     logger.info(msg)
     return make_response(({'message': msg}, 200))
 
-@app.route("/run/<mode>", methods = ['POST'])
+
+@app.route("/run/<mode>", methods=['POST'])
 def run(mode):
     if mode not in MODES:
         msg = f"mode '{mode}' unknown"
         logger.error(msg)
-        return make_response(({ 'error': msg }, 401))
+        return make_response(({'error': msg}, 401))
     fp_osrm = os.path.join(app.config['DATA_FOLDER'], mode)
     if not os.path.exists(f'{fp_osrm}.osrm.edges'):
         msg = f'error: mode "{mode}" not built yet'
@@ -92,7 +92,8 @@ def run(mode):
     logger.info(msg)
     return make_response(({'message': msg}, 200))
 
-@app.route("/remove/<mode>", methods = ['POST'])
+
+@app.route("/remove/<mode>", methods=['POST'])
 def remove(mode):
     if app.process.get(mode):
         app.process[mode].kill()
@@ -103,7 +104,8 @@ def remove(mode):
     logging.info(msg)
     return make_response(({'message': msg}, 200))
 
-@app.route("/stop/<mode>", methods = ['POST'])
+
+@app.route("/stop/<mode>", methods=['POST'])
 def stop(mode):
     if app.process.get(mode):
         app.process[mode].kill()
@@ -112,6 +114,7 @@ def stop(mode):
         msg = f'router "{mode}" not running'
     logging.info(msg)
     return make_response(({'message': msg}, 200))
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8001, use_reloader=True)
