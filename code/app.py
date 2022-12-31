@@ -4,11 +4,13 @@ from flask import Flask, request, make_response
 import subprocess
 import logging
 
+DEBUG = True
+
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG if DEBUG else logging.INFO)
 
 app = Flask(__name__)
 
-DEBUG = True
 
 app.config['DATA_FOLDER'] = os.environ.get('DATA_FOLDER',
                                            os.path.join(os.getcwd(), 'data'))
@@ -21,6 +23,11 @@ PORTS = {
     'bicycle': os.environ.get('MODE_BIKE_PORT', 5002),
     'foot': os.environ.get('MODE_FOOT_PORT', 5003),
 }
+
+
+def log_subprocess_output(pipe):
+    for line in iter(pipe.readline, b''):
+        logger.info('got line from subprocess: %r', line)
 
 
 @app.route("/", methods=['GET'])
@@ -39,25 +46,37 @@ def home():
 @app.route("/build/<mode>", methods=['POST'])
 def build(mode):
     if mode not in MODES:
-        return make_response(({'error': "mode '{}' unknown".format(mode)}, 400))
+        return make_response(({f'error': "mode '{mode}' unknown"}, 400))
     file = request.files.get('file')
     if not file or not file.filename:
         return make_response(({'error': 'no file provided'}, 400))
+
+    do_contract = False
     if app.process.get(mode):
         app.process[mode].kill()
     data_folder = app.config['DATA_FOLDER']
     if not os.path.exists(data_folder):
         os.mkdir(data_folder)
+    for fn in glob.glob(os.path.join(data_folder, f'{mode}*')):
+        logger.info(fn)
+        os.remove(fn)
+
+    algorithm_label = 'Contraction Hierarchies' if do_contract \
+        else 'Multi-Level Dijkstra'
+    logger.info(
+        f'Building router for mode "{mode}" with {algorithm_label} algorithm')
     fp_pbf = os.path.join(data_folder, mode + '.pbf')
     fp_osrm = os.path.join(data_folder, mode + '.osrm')
     fp_lua = os.path.join(app.config['LUA_FOLDER'], mode + '.lua')
     file.save(fp_pbf)
-    for cmd in (
-        ['osrm-extract', '-p', fp_lua, fp_pbf],
-        ['osrm-partition', fp_osrm],
-        ['osrm-customize', fp_osrm],
-        ['osrm-contract', fp_osrm]
-    ):
+    commands = [['osrm-extract', '-p', fp_lua, fp_pbf]]
+    if do_contract:
+        commands.append(['osrm-contract', fp_osrm])
+    else:
+        commands.append(['osrm-partition', fp_osrm])
+        commands.append(['osrm-customize', fp_osrm])
+    for cmd in commands:
+        logger.info('running "{}"'.format(cmd[0]))
         process = subprocess.run(cmd)
         if process.returncode != 0:
             return ({'error': 'Command "{}" failed'.format(cmd[0])}, 400)
@@ -71,12 +90,14 @@ def run(mode):
     if mode not in MODES:
         msg = f"mode '{mode}' unknown"
         logger.error(msg)
-        return make_response(({'error': msg}, 401))
+        return make_response(({'error': msg}, 400))
     fp_osrm = os.path.join(app.config['DATA_FOLDER'], mode)
+    do_contract = False
     if not os.path.exists(f'{fp_osrm}.osrm.edges'):
         msg = f'error: mode "{mode}" not built yet'
         logger.error(msg)
-        return make_response(({'error': msg}, 402))
+        return make_response(({'error': msg}, 400))
+
     if app.process.get(mode):
         app.process[mode].kill()
     body = request.get_json(silent=True) or {}
@@ -85,10 +106,20 @@ def run(mode):
                               os.environ.get('MAX_TABLE_SIZE', 65535))
     app.process[mode] = subprocess.Popen(
         ['osrm-routed', '--port', str(port),
-         #'--algorithm', 'mld',
+         '--algorithm', 'ch' if do_contract else 'mld',
          '--verbosity', 'DEBUG' if DEBUG else 'INFO',
-         '--max-table-size', str(max_table_size), f'{fp_osrm}.osrm'])
-    msg = f'router "{mode}" started at port {port}'
+         '--max-table-size', str(max_table_size),
+         f'{fp_osrm}.osrm',
+         ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+
+    algorithm_label = 'Contraction Hierarchies' if do_contract \
+        else 'Multi-Level Dijkstra'
+    msg = f'router "{mode}" started at port {port} with {algorithm_label} algorithm'
+    logger.info(msg)
+    with app.process[mode].stdout:
+        log_subprocess_output(app.process[mode].stdout)
     logger.info(msg)
     return make_response(({'message': msg}, 200))
 
