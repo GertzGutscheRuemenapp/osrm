@@ -1,8 +1,9 @@
 import os
 import glob
+from time import sleep
 import pytest
 import requests
-from time import sleep
+from retry import retry
 from app import app as flask_app
 
 
@@ -100,11 +101,11 @@ def test_run(client):
     # stop the router
     response = client.post("/stop/foot")
     assert response.status_code == 200
-    sleep(0.2)
+    sleep(0.5)
 
     # now it should not be available
     with pytest.raises(requests.exceptions.ConnectionError) as e_info:
-        res = requests.get(url, params=data)
+        res = call_url(url, data)
 
     # start it again
     response = client.post("/run/foot", data={'algorithm': 'mld'})
@@ -112,7 +113,7 @@ def test_run(client):
     sleep(0.5)
 
     # now it should be available
-    res = requests.get(url, params=data)
+    res = call_url(url, data)
     assert response.status_code == 200
 
     # and return 3 matched nodes
@@ -136,7 +137,7 @@ def test_run(client):
     url = f'{base_url}/nearest/v1/driving/{coords}'
     data = {'number': 3, }
 
-    res = requests.get(url, params=data)
+    res = call_url(url, data)
     assert response.status_code == 200
 
     # and return 3 matched nodes
@@ -144,6 +145,12 @@ def test_run(client):
     assert nearest['code'] == 'Ok'
     wpts = nearest['waypoints']
     assert len(wpts) == 3
+
+
+@retry(exceptions=requests.exceptions.ConnectionError, tries=5, delay=0.2, backoff=2)
+def call_url(url: str, data: dict):
+    res = requests.get(url, params=data)
+    return res
 
 
 def test_remove(client):
