@@ -1,4 +1,5 @@
 import os
+import glob
 import pytest
 import requests
 from time import sleep
@@ -10,7 +11,6 @@ def app():
     flask_app.config.update({
         "TESTING": True,
     })
-    #flask_app.run(host="0.0.0.0", port=8001, use_reloader=True)
 
     # other setup can go here
 
@@ -40,9 +40,15 @@ def build(client):
     """build the router"""
     fp = os.path.join(os.path.dirname(__file__), 'testdata', 'test.osm.pbf')
     files = {'file': open(fp, 'rb'),
-             'algoritm': 'ch', }
+             'algorithm': 'mld', }
 
     response = client.post("/build/foot", data=files)
+    assert response.status_code == 200
+    
+    files = {'file': open(fp, 'rb'),
+             'algorithm': 'ch', }
+
+    response = client.post("/build/car", data=files)
     assert response.status_code == 200
 
 
@@ -79,12 +85,13 @@ def test_run(client):
     build(client)
 
     # start the router
-    response = client.post("/run/foot", data={'algoritm': 'ch'}, )
+    response = client.post("/run/foot", data={'algorithm': 'mld'}, )
     assert response.status_code == 200
-    sleep(0.2)
+    sleep(0.5)
 
     # url and params to call the router
-    base_url = 'http://localhost:5003'
+    foot_port = os.environ.get('MODE_FOOT_PORT', 5003)
+    base_url = f'http://localhost:{foot_port}'
     lat, lon = 9.0, 50.4
     coords = f'{lat},{lon}'
     url = f'{base_url}/nearest/v1/driving/{coords}'
@@ -100,11 +107,35 @@ def test_run(client):
         res = requests.get(url, params=data)
 
     # start it again
-    response = client.post("/run/foot")
+    response = client.post("/run/foot", data={'algorithm': 'mld'})
     assert response.status_code == 200
-    sleep(0.2)
+    sleep(0.5)
 
     # now it should be available
+    res = requests.get(url, params=data)
+    assert response.status_code == 200
+
+    # and return 3 matched nodes
+    nearest = res.json()
+    assert nearest['code'] == 'Ok'
+    wpts = nearest['waypoints']
+    assert len(wpts) == 3
+
+    # start car router with CH-algorithm
+    response = client.post("/run/car", data={'algorithm': 'ch'})
+    assert response.status_code == 200
+    sleep(0.5)
+
+    # now it should be available
+
+    # url and params to call the router
+    foot_port = os.environ.get('MODE_CAR_PORT', 5001)
+    base_url = f'http://localhost:{foot_port}'
+    lat, lon = 9.0, 50.4
+    coords = f'{lat},{lon}'
+    url = f'{base_url}/nearest/v1/driving/{coords}'
+    data = {'number': 3, }
+
     res = requests.get(url, params=data)
     assert response.status_code == 200
 
@@ -134,5 +165,6 @@ def test_remove(client):
     assert response.status_code == 200
 
     # now only the pbf-file should be left
-    d = os.listdir(os.path.join(os.path.dirname(__file__), 'data'))
-    assert d == ['foot.pbf']
+    fp_osrm = os.path.join(os.path.dirname(__file__), 'data', 'foot')
+    remaining_osrm_files = glob.glob(f'{fp_osrm}.osrm*')
+    assert not remaining_osrm_files

@@ -151,8 +151,9 @@ def stop(mode):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8001, use_reloader=True)
-    for mode in MODES:
-        run(mode)
+    port = os.environ.get('SERVICE_PORT', 8001)
+    app.run(host="0.0.0.0", port=port, use_reloader=True)
+    #for mode in MODES:
+        #run(mode)
 
 
