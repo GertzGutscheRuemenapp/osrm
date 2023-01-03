@@ -78,8 +78,11 @@ def run(mode):
         msg = 'error: mode "{}" not built yet'.format(mode)
         print(msg)
         return ({'error': msg}, 400)
-    if app.process.get(mode):
-        app.process[mode].kill()
+    process = app.process.get(mode)
+    if process.poll() is None:
+        msg = 'Router is already running. Please stop it first.'
+        print(msg)
+        return ({'message': msg}, 400)
     body = request.get_json() or {}
     port = body.get('port', PORTS.get(mode, 5000))
     max_table_size = body.get('max_table_size',
