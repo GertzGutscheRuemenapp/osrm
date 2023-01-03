@@ -3,8 +3,9 @@ import glob
 from flask import Flask, request, make_response
 import subprocess
 import logging
+from waitress import serve
 
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', False)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG if DEBUG else logging.INFO)
@@ -18,16 +19,16 @@ app.config['LUA_FOLDER'] = '/opt'
 app.process = {}
 
 MODES = ['car', 'foot', 'bicycle']
-PORTS = {
+PORTS_CH = {
     'car': os.environ.get('MODE_CAR_PORT', 5001),
     'bicycle': os.environ.get('MODE_BIKE_PORT', 5002),
     'foot': os.environ.get('MODE_FOOT_PORT', 5003),
 }
-
-
-def log_subprocess_output(pipe):
-    for line in iter(pipe.readline, b''):
-        logger.info('got line from subprocess: %r', line)
+PORTS_MLD = {
+    'car': os.environ.get('MODE_CAR_PORT', 5004),
+    'bicycle': os.environ.get('MODE_BIKE_PORT', 5005),
+    'foot': os.environ.get('MODE_FOOT_PORT', 5006),
+}
 
 
 @app.route("/", methods=['GET'])
@@ -51,37 +52,38 @@ def build(mode):
     if not file or not file.filename:
         return make_response(({'error': 'no file provided'}, 400))
 
-    do_contract = request.form.get('algorithm') == 'ch'
-    if app.process.get(mode):
-        app.process[mode].kill()
+    algorithms = ('ch', 'mld')
+    for algorithm in algorithms:
+        if app.process.get((mode, algorithm)):
+            app.process[(mode, algorithm)].kill()
+            msg = f'router "{mode}" for "{algorithm}" stopped'
+        else:
+            msg = f'router "{mode}" for "{algorithm}" not running'
     data_folder = app.config['DATA_FOLDER']
     if not os.path.exists(data_folder):
         os.mkdir(data_folder)
     for fn in glob.glob(os.path.join(data_folder, f'{mode}*')):
-        logger.info(fn)
+        print(fn)
         os.remove(fn)
 
-    algorithm_label = 'Contraction Hierarchies' if do_contract \
-        else 'Multi-Level Dijkstra'
-    logger.info(
+    algorithm_label = 'Contraction Hierarchies and Multi-Level Dijkstra'
+    print(
         f'Building router for mode "{mode}" with {algorithm_label} algorithm')
     fp_pbf = os.path.join(data_folder, mode + '.pbf')
     fp_osrm = os.path.join(data_folder, mode + '.osrm')
     fp_lua = os.path.join(app.config['LUA_FOLDER'], mode + '.lua')
     file.save(fp_pbf)
     commands = [['osrm-extract', '-p', fp_lua, fp_pbf]]
-    if do_contract:
-        commands.append(['osrm-contract', fp_osrm])
-    else:
-        commands.append(['osrm-partition', fp_osrm])
-        commands.append(['osrm-customize', fp_osrm])
+    commands.append(['osrm-partition', fp_osrm])
+    commands.append(['osrm-customize', fp_osrm])
+    commands.append(['osrm-contract', fp_osrm])
     for cmd in commands:
-        logger.info('running "{}"'.format(cmd[0]))
+        print('running "{}"'.format(cmd[0]))
         process = subprocess.run(cmd)
         if process.returncode != 0:
             return ({'error': 'Command "{}" failed'.format(cmd[0])}, 400)
     msg = 'router "{}" successfully built'.format(mode)
-    logger.info(msg)
+    print(msg)
     return make_response(({'message': msg}, 200))
 
 
@@ -93,67 +95,72 @@ def run(mode):
         return make_response(({'error': msg}, 400))
     fp_osrm = os.path.join(app.config['DATA_FOLDER'], mode)
 
-    do_contract = request.form.get('algorithm') == 'ch'
+    algorithm = request.form.get('algorithm', 'ch')
+    if algorithm == 'ch':
+        PORTS = PORTS_CH
+    else:
+        PORTS = PORTS_MLD
 
     if not os.path.exists(f'{fp_osrm}.osrm.edges'):
         msg = f'error: mode "{mode}" not built yet'
         logger.error(msg)
         return make_response(({'error': msg}, 400))
 
-    if app.process.get(mode):
-        app.process[mode].kill()
+    process = app.process.get((mode, algorithm))
+    if process and process.poll() is None:
+        msg = 'Router is already running. Please stop it first.'
+        logger.error(msg)
+        return ({'message': msg}, 400)
     body = request.get_json(silent=True) or {}
     port = body.get('port', PORTS.get(mode, 5000))
     max_table_size = body.get('max_table_size',
                               os.environ.get('MAX_TABLE_SIZE', 65535))
-    app.process[mode] = subprocess.Popen(
+    app.process[(mode, algorithm)] = subprocess.Popen(
         ['osrm-routed', '--port', str(port),
-         '--algorithm', 'ch' if do_contract else 'mld',
+         '--algorithm', algorithm,
          '--verbosity', 'DEBUG' if DEBUG else 'INFO',
          '--max-table-size', str(max_table_size),
          f'{fp_osrm}.osrm',
          ],
-        #stdout=subprocess.PIPE,
-        #stderr=subprocess.STDOUT,
     )
 
-    algorithm_label = 'Contraction Hierarchies' if do_contract \
+    algorithm_label = 'Contraction Hierarchies' if algorithm =='ch' \
         else 'Multi-Level Dijkstra'
     msg = f'router "{mode}" started at port {port} with {algorithm_label} algorithm'
-    logger.info(msg)
-    #with app.process[mode].stdout:
-    #log_subprocess_output(app.process[mode].stdout)
-    logger.info(msg)
+    print(msg)
     return make_response(({'message': msg}, 200))
 
 
 @app.route("/remove/<mode>", methods=['POST'])
 def remove(mode):
-    if app.process.get(mode):
-        app.process[mode].kill()
+    for algorithm in ('ch', 'mld'):
+        if app.process.get((mode, algorithm)):
+            app.process[(mode, algorithm)].kill()
     fp_osrm = os.path.join(app.config['DATA_FOLDER'], mode)
     for fp in glob.glob(f'{fp_osrm}.osrm*'):
         os.remove(fp)
     msg = f'router "{fp_osrm}" removed'
-    logging.info(msg)
+    print(msg)
     return make_response(({'message': msg}, 200))
 
 
 @app.route("/stop/<mode>", methods=['POST'])
 def stop(mode):
-    if app.process.get(mode):
-        app.process[mode].kill()
-        msg = f'router "{mode}" stopped'
-    else:
-        msg = f'router "{mode}" not running'
+    algorithm = request.form.get('algorithm')
+    algorithms = [algorithm] if algorithm else ('ch', 'mld')
+    for algorithm in algorithms:
+        if app.process.get((mode, algorithm)):
+            app.process[(mode, algorithm)].kill()
+            msg = f'router "{mode}" for "{algorithm}" stopped'
+        else:
+            msg = f'router "{mode}" for "{algorithm}" not running'
     logging.info(msg)
     return make_response(({'message': msg}, 200))
 
 
 if __name__ == "__main__":
     port = os.environ.get('SERVICE_PORT', 8001)
-    app.run(host="0.0.0.0", port=port, use_reloader=True)
-    #for mode in MODES:
-        #run(mode)
-
-
+    if DEBUG:
+        app.run(host="0.0.0.0", port=port, use_reloader=True)
+    else:
+        serve(app, host="0.0.0.0", port=8001)

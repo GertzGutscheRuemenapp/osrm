@@ -40,14 +40,12 @@ def test_get(client):
 def build(client):
     """build the router"""
     fp = os.path.join(os.path.dirname(__file__), 'testdata', 'test.osm.pbf')
-    files = {'file': open(fp, 'rb'),
-             'algorithm': 'mld', }
+    files = {'file': open(fp, 'rb')}
 
     response = client.post("/build/foot", data=files)
     assert response.status_code == 200
     
-    files = {'file': open(fp, 'rb'),
-             'algorithm': 'ch', }
+    files = {'file': open(fp, 'rb')}
 
     response = client.post("/build/car", data=files)
     assert response.status_code == 200
@@ -67,15 +65,7 @@ def test_build(client):
     assert response.status_code == 400
 
     # this should work
-    files = {'file': open(fp, 'rb'),
-             'algorithm': 'ch'}
-    response = client.post("/build/foot", data=files)
-    assert response.status_code == 200
-
-    #params['algorithm'] = 'ch'
-    files = {'file': open(fp, 'rb'),
-             'algorithm': 'mld'}
-    # this should work with other algorithm
+    files = {'file': open(fp, 'rb')}
     response = client.post("/build/foot", data=files)
     assert response.status_code == 200
 
@@ -85,17 +75,21 @@ def test_run(client):
     # build network
     build(client)
 
-    # start the router
+    # start the router walk for ch and mld
     response = client.post("/run/foot", data={'algorithm': 'mld'}, )
+    assert response.status_code == 200
+    response = client.post("/run/foot", data={'algorithm': 'ch'}, )
     assert response.status_code == 200
     sleep(0.5)
 
     # url and params to call the router
-    foot_port = os.environ.get('MODE_FOOT_PORT', 5003)
-    base_url = f'http://localhost:{foot_port}'
+    foot_port_ch = os.environ.get('MODE_FOOT_PORT', 5003)
+    base_url_ch = f'http://localhost:{foot_port_ch}'
+    foot_port_mld = os.environ.get('MODE_FOOT_PORT', 5006)
+    base_url_mld = f'http://localhost:{foot_port_mld}'
     lat, lon = 9.0, 50.4
     coords = f'{lat},{lon}'
-    url = f'{base_url}/nearest/v1/driving/{coords}'
+    url = '{}/nearest/v1/driving/{}'
     data = {'number': 3, }
 
     # stop the router
@@ -103,9 +97,13 @@ def test_run(client):
     assert response.status_code == 200
     sleep(0.5)
 
+    # now both routers should not be available
+    with pytest.raises(requests.exceptions.ConnectionError) as e_info:
+        res = call_url(url.format(base_url_ch, coords), data)
+
     # now it should not be available
     with pytest.raises(requests.exceptions.ConnectionError) as e_info:
-        res = call_url(url, data)
+        res = call_url(url.format(base_url_mld, coords), data)
 
     # start it again
     response = client.post("/run/foot", data={'algorithm': 'mld'})
@@ -113,7 +111,17 @@ def test_run(client):
     sleep(0.5)
 
     # now it should be available
-    res = call_url(url, data)
+    res = call_url(url.format(base_url_mld, coords), data)
+    assert response.status_code == 200
+
+    # and return 3 matched nodes
+    nearest = res.json()
+    assert nearest['code'] == 'Ok'
+    wpts = nearest['waypoints']
+    assert len(wpts) == 3
+
+    # also the router mld should be available
+    res = call_url(url.format(base_url_mld, coords), data)
     assert response.status_code == 200
 
     # and return 3 matched nodes
