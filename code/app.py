@@ -54,11 +54,7 @@ def build(mode):
 
     algorithms = ('ch', 'mld')
     for algorithm in algorithms:
-        if app.process.get((mode, algorithm)):
-            app.process[(mode, algorithm)].kill()
-            msg = f'router "{mode}" for "{algorithm}" stopped'
-        else:
-            msg = f'router "{mode}" for "{algorithm}" not running'
+        stop_router(mode, algorithm)
     data_folder = app.config['DATA_FOLDER']
     if not os.path.exists(data_folder):
         os.mkdir(data_folder)
@@ -108,9 +104,7 @@ def run(mode):
 
     process = app.process.get((mode, algorithm))
     if process and process.poll() is None:
-        msg = 'Router is already running. Please stop it first.'
-        logger.error(msg)
-        return ({'message': msg}, 400)
+        msg = stop_router(mode, algorithm)
     body = request.get_json(silent=True) or {}
     port = body.get('port', PORTS.get(mode, 5000))
     max_table_size = body.get('max_table_size',
@@ -134,8 +128,7 @@ def run(mode):
 @app.route("/remove/<mode>", methods=['POST'])
 def remove(mode):
     for algorithm in ('ch', 'mld'):
-        if app.process.get((mode, algorithm)):
-            app.process[(mode, algorithm)].kill()
+        msg = stop_router(mode, algorithm)
     fp_osrm = os.path.join(app.config['DATA_FOLDER'], mode)
     for fp in glob.glob(f'{fp_osrm}.osrm*'):
         os.remove(fp)
@@ -148,14 +141,20 @@ def remove(mode):
 def stop(mode):
     algorithm = request.form.get('algorithm')
     algorithms = [algorithm] if algorithm else ('ch', 'mld')
+    msg = ''
     for algorithm in algorithms:
-        if app.process.get((mode, algorithm)):
-            app.process[(mode, algorithm)].kill()
-            msg = f'router "{mode}" for "{algorithm}" stopped'
-        else:
-            msg = f'router "{mode}" for "{algorithm}" not running'
+        msg += stop_router(mode, algorithm)
     logging.info(msg)
     return make_response(({'message': msg}, 200))
+
+
+def stop_router(mode: str, algorithm: str) -> str:
+    if app.process.get((mode, algorithm)):
+        app.process[(mode, algorithm)].kill()
+        msg = f'router "{mode}" for "{algorithm}" stopped'
+    else:
+        msg = f'router "{mode}" for "{algorithm}" not running'
+    return msg
 
 
 if __name__ == "__main__":
