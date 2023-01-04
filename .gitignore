@@ -1,5 +1,6 @@
 /data
 /data_dev
-/osrm-docker.wpr
-/osrm-docker.wpu
+/data_test
+/*.wpr
+/*.wpu
 *.pyc

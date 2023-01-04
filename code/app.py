@@ -5,7 +5,7 @@ import subprocess
 import logging
 from waitress import serve
 
-DEBUG = os.environ.get('DEBUG', False)
+DEBUG = os.environ.get('DEBUG_MODE', False)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG if DEBUG else logging.INFO)
@@ -19,15 +19,10 @@ app.config['LUA_FOLDER'] = '/opt'
 app.process = {}
 
 MODES = ['car', 'foot', 'bicycle']
-PORTS_CH = {
+PORTS = {
     'car': os.environ.get('MODE_CAR_PORT', 5001),
     'bicycle': os.environ.get('MODE_BIKE_PORT', 5002),
     'foot': os.environ.get('MODE_FOOT_PORT', 5003),
-}
-PORTS_MLD = {
-    'car': os.environ.get('MODE_CAR_PORT', 5004),
-    'bicycle': os.environ.get('MODE_BIKE_PORT', 5005),
-    'foot': os.environ.get('MODE_FOOT_PORT', 5006),
 }
 
 
@@ -52,9 +47,7 @@ def build(mode):
     if not file or not file.filename:
         return make_response(({'error': 'no file provided'}, 400))
 
-    algorithms = ('ch', 'mld')
-    for algorithm in algorithms:
-        stop_router(mode, algorithm)
+    stop_router(mode)
     data_folder = app.config['DATA_FOLDER']
     if not os.path.exists(data_folder):
         os.mkdir(data_folder)
@@ -63,8 +56,7 @@ def build(mode):
         os.remove(fn)
 
     algorithm_label = 'Contraction Hierarchies and Multi-Level Dijkstra'
-    print(
-        f'Building router for mode "{mode}" with {algorithm_label} algorithm')
+    print(f'Building router for mode "{mode}" with {algorithm_label} algorithm')
     fp_pbf = os.path.join(data_folder, mode + '.pbf')
     fp_osrm = os.path.join(data_folder, mode + '.osrm')
     fp_lua = os.path.join(app.config['LUA_FOLDER'], mode + '.lua')
@@ -92,19 +84,17 @@ def run(mode):
     fp_osrm = os.path.join(app.config['DATA_FOLDER'], mode)
 
     algorithm = request.form.get('algorithm', 'ch')
-    if algorithm == 'ch':
-        PORTS = PORTS_CH
-    else:
-        PORTS = PORTS_MLD
 
     if not os.path.exists(f'{fp_osrm}.osrm.edges'):
         msg = f'error: mode "{mode}" not built yet'
         logger.error(msg)
         return make_response(({'error': msg}, 400))
 
-    process = app.process.get((mode, algorithm))
+    process = app.process.get(mode)
     if process and process.poll() is None:
-        msg = stop_router(mode, algorithm)
+        msg = 'Router is already running. Please stop it first.'
+        logger.error(msg)
+        return ({'message': msg}, 400)
     body = request.get_json(silent=True) or {}
     port = body.get('port', PORTS.get(mode, 5000))
     max_table_size = body.get('max_table_size',
@@ -127,8 +117,8 @@ def run(mode):
 
 @app.route("/remove/<mode>", methods=['POST'])
 def remove(mode):
-    for algorithm in ('ch', 'mld'):
-        msg = stop_router(mode, algorithm)
+    if app.process.get(mode):
+        stop_router(mode)
     fp_osrm = os.path.join(app.config['DATA_FOLDER'], mode)
     for fp in glob.glob(f'{fp_osrm}.osrm*'):
         os.remove(fp)
@@ -139,18 +129,15 @@ def remove(mode):
 
 @app.route("/stop/<mode>", methods=['POST'])
 def stop(mode):
-    algorithm = request.form.get('algorithm')
-    algorithms = [algorithm] if algorithm else ('ch', 'mld')
-    msg = ''
-    for algorithm in algorithms:
-        msg += stop_router(mode, algorithm)
-    logging.info(msg)
+    msg = stop_router(mode)
+    print(msg)
     return make_response(({'message': msg}, 200))
 
 
-def stop_router(mode: str, algorithm: str) -> str:
-    if app.process.get((mode, algorithm)):
-        app.process[(mode, algorithm)].kill()
+def stop_router(mode: str) -> str:
+    process = app.process.get(mode)
+    if process:
+        app.process[mode].kill()
         msg = f'router "{mode}" for "{algorithm}" stopped'
     else:
         msg = f'router "{mode}" for "{algorithm}" not running'
