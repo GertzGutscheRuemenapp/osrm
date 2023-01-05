@@ -99,7 +99,7 @@ def run(mode):
     port = body.get('port', PORTS.get(mode, 5000))
     max_table_size = body.get('max_table_size',
                               os.environ.get('MAX_TABLE_SIZE', 65535))
-    app.process[(mode, algorithm)] = subprocess.Popen(
+    app.process[mode] = subprocess.Popen(
         ['osrm-routed', '--port', str(port),
          '--algorithm', algorithm,
          '--verbosity', 'DEBUG' if DEBUG else 'INFO',

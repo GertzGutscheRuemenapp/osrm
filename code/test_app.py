@@ -78,8 +78,9 @@ def test_run(client):
     # start the router walk for ch and mld
     response = client.post("/run/foot", data={'algorithm': 'mld'}, )
     assert response.status_code == 200
+    # second start should fail because router is already running
     response = client.post("/run/foot", data={'algorithm': 'ch'}, )
-    assert response.status_code == 200
+    assert response.status_code == 400
     sleep(0.5)
 
     # url and params to call the router
