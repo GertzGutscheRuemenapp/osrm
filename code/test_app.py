@@ -83,53 +83,40 @@ def test_run(client):
     sleep(0.5)
 
     # url and params to call the router
-    foot_port_ch = os.environ.get('MODE_FOOT_PORT', 5003)
-    base_url_ch = f'http://localhost:{foot_port_ch}'
-    foot_port_mld = os.environ.get('MODE_FOOT_PORT', 5006)
-    base_url_mld = f'http://localhost:{foot_port_mld}'
+    foot_port = os.environ.get('MODE_FOOT_PORT', 5003)
+    base_url = f'http://localhost:{foot_port}'
     lat, lon = 9.0, 50.4
     coords = f'{lat},{lon}'
     url = '{}/nearest/v1/driving/{}'
     data = {'number': 3, }
+    
+    # test foot router with both algorithms available    
+    for algorithm in ['mld', 'ch']:        
 
-    # stop the router
-    response = client.post("/stop/foot")
-    assert response.status_code == 200
-    sleep(0.5)
-
-    # now both routers should not be available
-    with pytest.raises(requests.exceptions.ConnectionError) as e_info:
-        res = call_url(url.format(base_url_ch, coords), data)
-
-    # now it should not be available
-    with pytest.raises(requests.exceptions.ConnectionError) as e_info:
-        res = call_url(url.format(base_url_mld, coords), data)
-
-    # start it again
-    response = client.post("/run/foot", data={'algorithm': 'mld'})
-    assert response.status_code == 200
-    sleep(0.5)
-
-    # now it should be available
-    res = call_url(url.format(base_url_mld, coords), data)
-    assert response.status_code == 200
-
-    # and return 3 matched nodes
-    nearest = res.json()
-    assert nearest['code'] == 'Ok'
-    wpts = nearest['waypoints']
-    assert len(wpts) == 3
-
-    # also the router mld should be available
-    res = call_url(url.format(base_url_mld, coords), data)
-    assert response.status_code == 200
-
-    # and return 3 matched nodes
-    nearest = res.json()
-    assert nearest['code'] == 'Ok'
-    wpts = nearest['waypoints']
-    assert len(wpts) == 3
-
+        # stop the router
+        response = client.post("/stop/foot")
+        assert response.status_code == 200
+        sleep(0.5)
+    
+        # now it should not be available
+        with pytest.raises(requests.exceptions.ConnectionError) as e_info:
+            res = call_url(url.format(base_url, coords), data)
+    
+        # start it again
+        response = client.post("/run/foot", data={'algorithm': algorithm})
+        assert response.status_code == 200
+        sleep(0.5)
+    
+        # now it should be available
+        res = call_url(url.format(base_url, coords), data)
+        assert response.status_code == 200
+    
+        # and return 3 matched nodes
+        nearest = res.json()
+        assert nearest['code'] == 'Ok'
+        wpts = nearest['waypoints']
+        assert len(wpts) == 3
+    
     # start car router with CH-algorithm
     response = client.post("/run/car", data={'algorithm': 'ch'})
     assert response.status_code == 200

@@ -117,8 +117,7 @@ def run(mode):
 
 @app.route("/remove/<mode>", methods=['POST'])
 def remove(mode):
-    if app.process.get(mode):
-        stop_router(mode)
+    stop_router(mode)
     fp_osrm = os.path.join(app.config['DATA_FOLDER'], mode)
     for fp in glob.glob(f'{fp_osrm}.osrm*'):
         os.remove(fp)
@@ -137,10 +136,10 @@ def stop(mode):
 def stop_router(mode: str) -> str:
     process = app.process.get(mode)
     if process:
-        app.process[mode].kill()
-        msg = f'router "{mode}" for "{algorithm}" stopped'
+        process.kill()
+        msg = f'router "{mode}" stopped'
     else:
-        msg = f'router "{mode}" for "{algorithm}" not running'
+        msg = f'router "{mode}" not running'
     return msg
 
 
