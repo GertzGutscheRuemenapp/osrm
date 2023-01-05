@@ -1,4 +1,4 @@
-FROM osrm/osrm-backend AS osrm-docker
+FROM ghcr.io/project-osrm/osrm-backend:v5.27.1 AS osrm-docker
 
 RUN apt-get -y update \
     && apt-get -y upgrade \
@@ -6,8 +6,10 @@ RUN apt-get -y update \
     && apt-get -y install python3-pip
 RUN ln -s /usr/bin/python3 /usr/bin/python
 WORKDIR /app
-COPY requirements.txt .
-COPY app.py .
+COPY code/app.py .
+COPY code/test_app.py .
+COPY code/requirements.txt .
+ADD code/testdata ./testdata
 RUN python -m pip install --trusted-host pypi.python.org -r requirements.txt
 
 EXPOSE 5000-5010
