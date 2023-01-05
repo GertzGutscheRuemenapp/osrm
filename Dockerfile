@@ -6,7 +6,8 @@ RUN apt-get -y update \
     && apt-get -y install python3-pip
 RUN ln -s /usr/bin/python3 /usr/bin/python
 WORKDIR /app
-COPY code/*.py .
+COPY code/app.py .
+COPY code/test_app.py .
 COPY code/requirements.txt .
 ADD code/testdata ./testdata
 RUN python -m pip install --trusted-host pypi.python.org -r requirements.txt
